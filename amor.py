@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 import math
+import parse_VSAC
+import datetime
 
 @dataclass
 class Group:
@@ -18,17 +20,16 @@ class Record:
   payment: float
 
 OUTPUT_FILE = "payments.csv"
-TOTAL_MONTHLY_PAYMENT = 1950
-GROUPS = [
-  Group('fg', principal=13369.94, rate=.0379, nper=91, installment=178),
-  Group('de', principal=7340.87, rate=.0399, nper=80, installment=112),
-  Group('hi', principal=16756.24, rate=.0499, nper=100, installment=209), 
-  Group('abc', 26670.61, .059, 113, 354)
-  ]
+TOTAL_MONTHLY_PAYMENT = 2800
+
+def convertDetailsToGroups(details):
+  groups = []
+  for det in details:
+    groups.append(Group(det['groupId'], principal=det['principal'], rate=det['rate'], nper=0, installment=det['installment']))
+  return groups
 
 def calcInterest(g: Group):
   g.interest = (g.rate/12)*g.principal
-
 
 def pay(g: Group, payment: float):
   g.principal -= (payment-g.interest)
@@ -62,9 +63,10 @@ def payAllGroups(list_of_groups, total_monthly_payment):
 
 if __name__ == "__main__":
   of = open(OUTPUT_FILE, "w")
+  GROUP_DETAILS = parse_VSAC.parse("vsac.html")
 
   month = 1
-  groups = GROUPS
+  groups = convertDetailsToGroups(GROUP_DETAILS)
   of.write("Month")
   for i in range(0, len(groups)):
     of.write(",Group,Outstanding Interest,Payment,Resulting Principal")
