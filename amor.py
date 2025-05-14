@@ -1,9 +1,11 @@
 from dataclasses import dataclass
-import math
 import parse_VSAC
 import datetime
 from dateutil.relativedelta import relativedelta
 from typing import List
+
+OUTPUT_FILE = "payments.csv"
+DELTA = relativedelta(months=1)
 
 @dataclass
 class Group:
@@ -28,10 +30,6 @@ class Record:
   interest: float
   payment: float
   
-
-OUTPUT_FILE = "payments.csv"
-TOTAL_MONTHLY_PAYMENT = 2750
-
 def consolidateGroups(groups: List[Group]):
   consolidatedGroupIds = []
   newGroups = []
@@ -83,14 +81,18 @@ def pay(g: Group, payment: float):
 
 def payAllGroups(list_of_groups: List[Group], total_monthly_payment):
   records = []
+  
+  # this for loop makes the installment payment on every loan group
   for i in list_of_groups:
     intitialPrincipal = i.principal
     calcInterest(i)
+    # if the total amount on the loan (principal + interest) is less than the installment, just pay the remaining amount
     p = min(i.installment, i.interest+i.principal)
     pay(i, p)
     total_monthly_payment-=p
     records.append(Record(initialPrincipal=intitialPrincipal, group_id=i.id, principal=i.principal, interest=i.interest, payment=p))
   
+  # this while loop spends the rest of the total monthly payment on the loans with the highest rates (the end of the array)
   i = len(list_of_groups)-1
   while(total_monthly_payment>0 and list_of_groups[0].principal > 0):
     g = list_of_groups[i]
@@ -99,7 +101,7 @@ def payAllGroups(list_of_groups: List[Group], total_monthly_payment):
     else:
       p = min(total_monthly_payment, g.principal)
 
-    g.principal -= p
+    g.principal -= p # we already paid the interest on this loan so that's why we don't use the pay() function here
     total_monthly_payment-=p
     records[i].principal -= p
     records[i].payment += p
@@ -130,8 +132,7 @@ def getPaymentSchedule():
 if __name__ == "__main__":
   of = open(OUTPUT_FILE, "w")
   GROUP_DETAILS = parse_VSAC.parse("vsac.html")
-  delta = relativedelta(months=1)
-  date = datetime.date.today() + delta
+  date = datetime.date.today() + DELTA
   month = 1
   groups = convertDetailsToGroups(GROUP_DETAILS)
   groups = consolidateGroups(groups)
@@ -148,7 +149,7 @@ if __name__ == "__main__":
     total_monthly_payment = paymentSchedule[paymentIndex]
 
     of.write(date.strftime("%m/%d/%Y")+",")
-    date += delta
+    date += DELTA
 
     records: List[Record] = payAllGroups(groups, total_monthly_payment)
     recordTotals: RecordTotals = calcRecordTotals(records)
@@ -172,7 +173,8 @@ if __name__ == "__main__":
       groups.pop(-1)
 
   of.close()
-  print("Final payment made on ")
+  finalMonth = (date-DELTA).strftime("%B, %Y")
+  print(f"Final payment made in {finalMonth}")
 
 
 
