@@ -69,7 +69,6 @@ def calcRecordTotals(records: List[Record]):
     "totalResultingPrincipal": totalResultingPrincipal
   }
   
-
 def convertDetailsToGroups(details):
   groups = []
   for det in details:
@@ -108,6 +107,26 @@ def payAllGroups(list_of_groups: List[Group], total_monthly_payment):
 
   return records
 
+def getPaymentSchedule():
+  paymentSchedule = []
+  monthInput = -1
+  while monthInput != "":
+    month = -1
+    amount = -1
+    while amount == -1:
+      try:
+        amount = float(input("Enter monthly payment:\n$"))
+      except ValueError:
+        print("Invalid input. Please enter a numeric value for payment amount.")
+    while month == -1:
+      try:
+        monthInput = input("Enter duration [default: all remaining months]\nMonths:")
+        month = int(monthInput) if monthInput else 1
+      except ValueError:
+        print("Invalid input. Please enter a numeric value for payment duration.")
+    paymentSchedule += [amount]*month
+  return paymentSchedule
+
 if __name__ == "__main__":
   of = open(OUTPUT_FILE, "w")
   GROUP_DETAILS = parse_VSAC.parse("vsac.html")
@@ -121,7 +140,7 @@ if __name__ == "__main__":
   for i in range(0, len(groups)):
     of.write(",Group,Outstanding Interest,Payment,Resulting Principal")
   of.write("\n")
-  paymentSchedule = [TOTAL_MONTHLY_PAYMENT]
+  paymentSchedule = getPaymentSchedule()
   paymentIndex = -1
   #every month until all groups are paid in full
   while len(groups) > 0:
@@ -153,6 +172,7 @@ if __name__ == "__main__":
       groups.pop(-1)
 
   of.close()
+  print("Final payment made on ")
 
 
 
