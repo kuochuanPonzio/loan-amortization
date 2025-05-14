@@ -2,30 +2,78 @@ from dataclasses import dataclass
 import math
 import parse_VSAC
 import datetime
+from dateutil.relativedelta import relativedelta
+from typing import List
 
 @dataclass
 class Group:
   id: str
   principal: float
   rate: float
-  nper: int
   installment: float
-  interest: float = 0
+  interest: float
+
+@dataclass
+class RecordTotals:
+  totalInterest: float
+  totalPayment: float
+  totalResultingPrincipal: float
+  totalInitialPrincipal: float
 
 @dataclass
 class Record:
   group_id: str
+  initialPrincipal: float
   principal: float
   interest: float
   payment: float
+  
 
 OUTPUT_FILE = "payments.csv"
-TOTAL_MONTHLY_PAYMENT = 2800
+TOTAL_MONTHLY_PAYMENT = 2750
+
+def consolidateGroups(groups: List[Group]):
+  consolidatedGroupIds = []
+  newGroups = []
+  for group in groups:
+    if group.id not in consolidatedGroupIds:
+      likeRateGroups: List[Group] = [g for g in groups if g.rate == group.rate]
+      sumPrincipal = 0
+      newName = ""
+      sumInstallment = 0
+      sumInterest = 0
+      for lg in likeRateGroups:
+        sumPrincipal += lg.principal
+        newName += lg.id
+        sumInstallment += lg.installment
+        sumInterest += lg.interest
+        consolidatedGroupIds.append(lg.id)
+      newGroups.append(Group(id=newName, principal=sumPrincipal, rate=group.rate, interest=sumInterest, installment=sumInstallment))
+  return newGroups
+    
+def calcRecordTotals(records: List[Record]):
+  totalInitialPrincipal = 0
+  totalInterest = 0
+  totalPayment = 0
+  totalResultingPrincipal = 0
+  for r in records:
+    totalInitialPrincipal += r.initialPrincipal
+    totalInterest += r.interest
+    totalPayment += r.payment
+    totalResultingPrincipal += r.principal
+  
+  return {
+    "totalInitialPrincipal": totalInitialPrincipal,
+    "totalInterest": totalInterest,
+    "totalPayment": totalPayment,
+    "totalResultingPrincipal": totalResultingPrincipal
+  }
+  
 
 def convertDetailsToGroups(details):
   groups = []
   for det in details:
-    groups.append(Group(det['groupId'], principal=det['principal'], rate=det['rate'], nper=0, installment=det['installment']))
+    groups.append(Group(det['groupId'], principal=det['principal'], rate=det['rate'], interest=det['outstanding interest'], installment=det['installment']))
   return groups
 
 def calcInterest(g: Group):
@@ -34,20 +82,19 @@ def calcInterest(g: Group):
 def pay(g: Group, payment: float):
   g.principal -= (payment-g.interest)
 
-def payAllGroups(list_of_groups, total_monthly_payment):
+def payAllGroups(list_of_groups: List[Group], total_monthly_payment):
   records = []
   for i in list_of_groups:
-    i : Group
+    intitialPrincipal = i.principal
     calcInterest(i)
-
     p = min(i.installment, i.interest+i.principal)
     pay(i, p)
     total_monthly_payment-=p
-    records.append(Record(group_id=i.id, principal=i.principal, interest=i.interest, payment=p))
+    records.append(Record(initialPrincipal=intitialPrincipal, group_id=i.id, principal=i.principal, interest=i.interest, payment=p))
   
   i = len(list_of_groups)-1
   while(total_monthly_payment>0 and list_of_groups[0].principal > 0):
-    g: Group = list_of_groups[i]
+    g = list_of_groups[i]
     if(len(list_of_groups)==1 and g.principal > total_monthly_payment):
       p = total_monthly_payment
     else:
@@ -64,29 +111,42 @@ def payAllGroups(list_of_groups, total_monthly_payment):
 if __name__ == "__main__":
   of = open(OUTPUT_FILE, "w")
   GROUP_DETAILS = parse_VSAC.parse("vsac.html")
-
+  delta = relativedelta(months=1)
+  date = datetime.date.today() + delta
   month = 1
   groups = convertDetailsToGroups(GROUP_DETAILS)
-  of.write("Month")
+  groups = consolidateGroups(groups)
+  
+  of.write("Date, Initial Balance, Total Principal, Total Interest, Total Payment, Resulting Balance")
   for i in range(0, len(groups)):
     of.write(",Group,Outstanding Interest,Payment,Resulting Principal")
   of.write("\n")
-
+  paymentSchedule = [TOTAL_MONTHLY_PAYMENT]
+  paymentIndex = -1
   #every month until all groups are paid in full
   while len(groups) > 0:
-    total_monthly_payment = TOTAL_MONTHLY_PAYMENT
+    paymentIndex = min(paymentIndex+1, len(paymentSchedule)-1)
+    total_monthly_payment = paymentSchedule[paymentIndex]
 
-    of.write(str(month)+",")
-    month+=1
+    of.write(date.strftime("%m/%d/%Y")+",")
+    date += delta
 
-    records = payAllGroups(groups, total_monthly_payment)
+    records: List[Record] = payAllGroups(groups, total_monthly_payment)
+    recordTotals: RecordTotals = calcRecordTotals(records)
+    of.write(
+      str(round(recordTotals["totalInitialPrincipal"]+recordTotals["totalInterest"], 2))+','+
+      str(round(recordTotals["totalInitialPrincipal"], 2))+','+
+      str(round(recordTotals["totalInterest"], 2))+','+
+      str(round(recordTotals["totalPayment"], 2))+','+
+      str(round(recordTotals["totalResultingPrincipal"], 2))+','
+    )
     for r in records:
-      r :Record
-      of.write(str(r.group_id)+ ','+
-               str(round(r.interest, 2))+','+ 
-               str(round(r.payment, 2))+ ','+ 
-               str(round(r.principal,2))+','
-               )
+      of.write(
+        str(r.group_id)+ ','+
+        str(round(r.interest, 2))+','+ 
+        str(round(r.payment, 2))+ ','+ 
+        str(round(r.principal,2))+','
+      )
     of.write('\n')
     #each group
     if groups[-1].principal <= 0:
